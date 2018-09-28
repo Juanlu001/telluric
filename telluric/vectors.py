@@ -2,6 +2,7 @@ import json
 import warnings
 
 import numpy as np
+import pyproj
 
 import shapely.geometry
 from shapely.geometry import (
@@ -36,7 +37,7 @@ GEOM_BINARY_OPERATIONS = [
 ]
 
 GEOM_UNARY_OPERATIONS = [
-    'buffer',
+    # 'buffer',  # Added geodesic buffering
     'simplify',
 ]
 
@@ -430,6 +431,31 @@ class GeoVector(_GeoVectorDelegator, NotebookPlottingMixin):
         """ invariant to crs. """
         # This method cannot be delegated because it has an extra parameter
         return self._shape.almost_equals(other.get_shape(self.crs), decimal=decimal)
+
+    def buffer(self, *args, geodesic=False, **kwargs):
+        """Returns a geometry with an envelope at a distance from the object's envelope.
+
+        If geodesic is True, performs geodesic buffering, see
+
+        http://www.esri.com/news/arcuser/0111/geodesic.html
+
+        See Shapely documentation on buffer for completeness.
+
+        """
+        if geodesic:
+            centroid_shp = self.centroid.get_shape(WGS84_CRS)
+            # https://gis.stackexchange.com/a/289923/99665
+            aeqd = pyproj.Proj(proj='aeqd', ellps='WGS84', datum='WGS84',
+                               lat_0=centroid_shp.y, lon_0=centroid_shp.x)
+            aeqd_crs = CRS.from_string(aeqd.srs)
+
+            return self.reproject(aeqd_crs).buffer(*args, **kwargs).reproject(self.crs)
+
+        else:
+            return self.__class__(
+                self._shape.buffer(*args, **kwargs),
+                self.crs
+            )
 
     def polygonize(self, width, cap_style_line=CAP_STYLE.flat, cap_style_point=CAP_STYLE.round):
         """Turns line or point into a buffered polygon."""
