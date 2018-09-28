@@ -92,7 +92,7 @@ def style_element(element, style_func=None):
 
 
 def layer_from_element(element, style_function=None):
-    """Return Leaflet layer from shape.
+    """Return Leaflet layer from element.
 
     Parameters
     ----------
@@ -110,6 +110,16 @@ def layer_from_element(element, style_function=None):
         styled_element = style_element(element, style_function)
 
     return GeoJSON(data=mapping(styled_element), name='GeoJSON')
+
+
+def map_from_element(feature, **map_kwargs):
+    """Return Leaflet map from element.
+
+    """
+    center = feature.envelope.centroid.reproject(WGS84_CRS)
+    zoom = zoom_level_from_geometry(feature.envelope)
+    mp = Map(center=(center.y, center.x), zoom=zoom, **map_kwargs)
+    return mp
 
 
 def plot(feature, mp=None, style_function=None, **map_kwargs):
@@ -134,10 +144,7 @@ def plot(feature, mp=None, style_function=None, **map_kwargs):
 
     else:
         if mp is None:
-            center = feature.envelope.centroid.reproject(WGS84_CRS)
-            zoom = zoom_level_from_geometry(feature.envelope)
-
-            mp = Map(center=(center.y, center.x), zoom=zoom, **map_kwargs)
+            mp = map_from_element(feature, **map_kwargs)
 
         mp.add_layer(layer_from_element(feature, style_function))
 
