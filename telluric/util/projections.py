@@ -6,6 +6,8 @@ from functools import partial
 import pyproj
 from shapely import ops
 
+from rasterio.crs import CRS
+
 from telluric.constants import WGS84_CRS
 
 
@@ -55,3 +57,16 @@ def transform(shape, source_crs, destination_crs=None, src_affine=None, dst_affi
         shape = ops.transform(lambda r, q: dst_affine * (r, q), shape)
 
     return shape
+
+
+def azimuthal_from_geometry(geometry):
+    """Returns azimuthal equidistant projection centered in geometry.
+
+    """
+    centroid_shp = geometry.centroid.get_shape(WGS84_CRS)
+    # https://gis.stackexchange.com/a/289923/99665
+    aeqd = pyproj.Proj(proj='aeqd', ellps='WGS84', datum='WGS84',
+                       lat_0=centroid_shp.y, lon_0=centroid_shp.x)
+    aeqd_crs = CRS.from_string(aeqd.srs)
+
+    return aeqd_crs

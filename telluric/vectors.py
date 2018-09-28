@@ -2,7 +2,6 @@ import json
 import warnings
 
 import numpy as np
-import pyproj
 
 import shapely.geometry
 from shapely.geometry import (
@@ -18,7 +17,7 @@ from typing import Tuple, Iterator
 
 from telluric.constants import DEFAULT_CRS, EQUAL_AREA_CRS, WGS84_CRS, WEB_MERCATOR_CRS
 from telluric.plotting import NotebookPlottingMixin
-from telluric.util.projections import transform
+from telluric.util.projections import transform, azimuthal_from_geometry
 
 
 # From shapely.geometry.base.BaseGeometry
@@ -443,13 +442,14 @@ class GeoVector(_GeoVectorDelegator, NotebookPlottingMixin):
 
         """
         if geodesic:
-            centroid_shp = self.centroid.get_shape(WGS84_CRS)
-            # https://gis.stackexchange.com/a/289923/99665
-            aeqd = pyproj.Proj(proj='aeqd', ellps='WGS84', datum='WGS84',
-                               lat_0=centroid_shp.y, lon_0=centroid_shp.x)
-            aeqd_crs = CRS.from_string(aeqd.srs)
+            aeqd_crs = azimuthal_from_geometry(self)
 
-            return self.reproject(aeqd_crs).buffer(*args, **kwargs).reproject(self.crs)
+            return (self
+                    .reproject(aeqd_crs)  # Reprojects to prepare buffering
+                    .buffer(*args, **kwargs)  # Buffers normally
+                    .intersection(WORLD_BOUNDS)  # Crops by world bounds to avoid future self-intersections
+                    .reproject(self.crs)  # Reprojects to original CRS
+                    )
 
         else:
             return self.__class__(
@@ -488,3 +488,11 @@ class GeoVector(_GeoVectorDelegator, NotebookPlottingMixin):
 
     def __repr__(self):
         return str(self)
+
+
+# We do not use 90.0 because reprojecting to WEB_MERCATOR_CRS will produce singularities
+ANTIMERIDIAN = GeoVector.line(((180, -89.999), (180, 89.999)), WGS84_CRS)
+WORLD_BOUNDS = GeoVector.from_bounds(-180, -89.999, 180, 89.999)
+
+# Obtained using WORLD_BOUNDS.get_shape(WEB_MERCATOR_CRS).bounds
+MERCATOR_WIDTH = 40075016.68557849
